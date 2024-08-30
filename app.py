@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_js_eval import get_geolocation
+from streamlit_js_eval import get_geolocation, streamlit_js_eval
 import requests
 from datetime import datetime, time
 import overpy
@@ -45,8 +45,7 @@ def find_nearest_mosque(lat, lon, radius=1000):
     return None, None
 
 # Function to determine the current prayer time
-def get_current_prayer(timings):
-    now = datetime.now().time()
+def get_current_prayer(timings, current_time):
     prayer_times = {
         "Fajr": datetime.strptime(timings["Fajr"], "%H:%M").time(),
         "Sunrise": datetime.strptime(timings["Sunrise"], "%H:%M").time(),
@@ -58,10 +57,17 @@ def get_current_prayer(timings):
     
     current_prayer = "Isha"  # Default to Isha if it's after Isha but before Fajr
     for prayer, prayer_time in prayer_times.items():
-        if now < prayer_time:
+        if current_time < prayer_time:
             return current_prayer
         current_prayer = prayer
     return current_prayer
+
+# Get user's local time using JavaScript
+user_time_str = streamlit_js_eval(js_expressions='new Date().toLocaleString()', key='current_time')
+if user_time_str:
+    user_time = datetime.strptime(user_time_str, "%m/%d/%Y, %I:%M:%S %p")
+else:
+    user_time = datetime.now()  # Fallback to server time if JS eval fails
 
 # Use get_geolocation to obtain user's location
 location = get_geolocation()
@@ -86,7 +92,7 @@ if user_location != st.session_state.location:
 # Fetch and display prayer times if location is available
 if user_location and ',' in user_location:
     lat, lon = map(float, user_location.split(','))
-    today = datetime.now().strftime("%d-%m-%Y")
+    today = user_time.strftime("%d-%m-%Y")
     try:
         response = requests.get(
             f"http://api.aladhan.com/v1/timings/{today}",
@@ -103,7 +109,7 @@ if user_location and ',' in user_location:
             
             st.success(f"Prayer Times for {date}")
             
-            current_prayer = get_current_prayer(timings)
+            current_prayer = get_current_prayer(timings, user_time.time())
             st.info(f"Current prayer time: {current_prayer}")
             
             col1, col2 = st.columns(2)
